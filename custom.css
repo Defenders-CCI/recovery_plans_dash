@@ -143,6 +143,7 @@ a:visited {
 
 .bg-info > * > p,
 .bg-danger > * > p, 
+.bg-success > * > p, 
 .bg-warning > * > p {
   color: white;
 }
