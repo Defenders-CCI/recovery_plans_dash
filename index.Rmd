@@ -1,0 +1,207 @@
+---
+title: "ESA Recovery Plans Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    css: custom.css
+    social: menu
+    df_print: paged
+    navbar:
+    - {title: "CCI", align: right, href: "https://defenders-cci.org"}
+    - {title: "", icon: "fa-question-circle fa-lg", align: right, href: "mailto:jmalcom@defenders.org?subject=recovery plans dashboard"}
+    - {title: "", icon: "fa-github fa-lg", align: right, href: "https://github.com/Defenders-CCI/"}
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(lubridate)
+library(plotly)
+library(shiny)
+library(shinydashboard)
+library(tidyverse)
+
+list <- readRDS("ESA_listed.rds")
+names(list) <- c("scientific", "sci_url", "common", "status", "entity", 
+                "listing_date", "foreign", "taxon", "region")
+list$listing_date <- mdy(list$listing_date)
+list$listing_year <- year(list$listing_date)
+# list <- filter(list, region != "National Oceanic and Atmospheric Administration")
+
+rec <- readRDS("recovery_data.rds")
+names(rec) <- c("common", "scientific", "status", "entity", 
+                "listing_date", "taxon", "region", "doc_title", "doc_date",
+                "doc_type")
+rec$doc_date <- mdy(rec$doc_date)
+rec$doc_date <- if_else(rec$doc_date == ymd("0019-09-26"),
+                        as.Date("2019-09-26"),
+                        rec$doc_date)
+rec$doc_date <- if_else(rec$doc_date == ymd("0019-01-31"),
+                        as.Date("2019-01-31"),
+                        rec$doc_date)
+
+dat <- left_join(list, select(rec, c(2, 4, 8:10)), by = c("scientific", "entity"))
+dat$doc_year <- year(dat$doc_date)
+
+w_final <- filter(dat, doc_type %in% c("Final", "Draft Revision 1", 
+                                       "Draft Revision 2", "Final Revision 1",
+                                       "Final Revision 2", "Final Revision 3"))
+w_plan <- filter(dat, !is.na(dat$doc_title))
+```
+
+
+Filters {.sidebar}
+-----------------------------------------------------
+
+### Filters
+
+```{r filters, echo=FALSE}
+taxa <- c("All", unique(list$taxon) %>% sort(decreasing = FALSE))
+regions <- c("All", unique(list$region) %>% sort(decreasing = FALSE))
+stages <- c("All", unique(dat$doc_type) %>% sort(decreasing = FALSE))
+
+selectInput(
+  "taxa1",
+  "Species group",
+  taxa
+)
+
+selectInput(
+  "region1",
+  "Region",
+  regions
+)
+
+selectInput(
+  "stage1",
+  "Plan stage",
+  stages
+)
+
+```
+
+```{r filtering, echo=FALSE}
+usr_sel <- function(df, tx, re, st = "All") {
+  if(tx != "All") {
+    df <- filter(df, taxon == tx)
+  }
+  if(re != "All") {
+    df <- filter(df, region == re)
+  }
+  if(st != "All") {
+    df <- filter(df, doc_type == st)
+  }
+  if(dim(df)[1] == 0) stop("No data matches.")
+  return(df)
+}
+
+uniq_sel <- reactive({ 
+  usr_sel(dat, input$taxa1, input$region1, input$stage1) 
+})
+
+list_sel <- reactive({
+  usr_sel(list, input$taxa1, input$region1)
+})
+```
+
+### Background
+
+The Endangered Species Act requires the creation of plans for recovering listed species. [Long-term funding shortfalls](https://defenders-cci.org/publication/conservation-funding/) have meant [extensive delays in planning](https://conbio.onlinelibrary.wiley.com/doi/full/10.1111/conl.12601). This dashboard provides an overview of recovery planning status of species managed primarily by the [U.S. Fish and Wildlife Service](https://www.fws.gov) based on their [data service](https://ecos.fws.gov/ecp/report/ad-hoc-documentation?catalogId=species&reportId=species), updated daily. 
+
+Row {data-height=750}
+-----------------------------------------------------
+
+### Distribution of recover plan dates
+
+```{r fig1, echo=FALSE}
+renderPlotly({
+  cur <- uniq_sel()
+  nbins <- dat$listing_year %>% unique() %>% length() 
+  plot_ly(
+    data = dat,
+    type = "histogram",
+    x = dat$listing_year,
+    marker = list(color = "rgba(0,0,0,0.1)"),
+    nbinsx = nbins,
+    xbins = list(start = min(dat$listing_year),
+                 end = max(dat$listing_year)),
+    name = "Listings"
+  ) %>%
+    add_histogram(x = dat$doc_year,
+                  marker = list(color = "#003B87"),
+                  nbinsx = nbins,
+                  xbins = list(start = min(dat$listing_year),
+                               end = max(dat$listing_year)),
+                  name = "All plans") %>%
+    add_histogram(x = cur$doc_year,
+                  marker = list(color = "#EA8439"),
+                  nbinsx = nbins,
+                  xbins = list(start = min(dat$listing_year),
+                               end = max(dat$listing_year)),
+                  name = "Filtered plans") %>%
+    layout(barmode = "overlay",
+           xaxis = list(title = "Date of review"),
+           yaxis = list(title = "Number of reviews"))
+})
+```
+
+Row {data-height=150}
+-------------------------------------------------------------
+### {.value-box}
+
+```{r info1, echo=FALSE}
+flexdashboard::renderValueBox({
+  flexdashboard::valueBox(
+    caption = "Number of ESA-Listed Species with FWS Lead",
+    value = nrow(list_sel()),
+    color = "info"
+  )
+})
+```
+
+### {.value-box}
+
+```{r}
+flexdashboard::renderValueBox({
+  old_enough <- filter(list_sel(), listing_date < Sys.Date() - 365 * 2.5)
+  flexdashboard::valueBox(
+    caption = "Number of Species Listed > 2.5 Years (recovery plan expected)",
+    value = nrow(old_enough),
+    color = "info"
+  )
+})
+```
+
+### {.value-box}
+
+```{r}
+flexdashboard::renderValueBox({
+  old_enough <- filter(uniq_sel(), listing_date < Sys.Date() - 365*2.5)
+  missing <- filter(old_enough, is.na(old_enough$doc_title))
+  flexdashboard::valueBox(
+    caption = "Number of Species Without Any Recovery Guidance",
+    value = nrow(missing),
+    color = "danger",
+    icon = "fa-times-circle"
+  )
+})
+```
+
+### {.value-box}
+
+```{r}
+flexdashboard::renderValueBox({
+  not_final <- filter(uniq_sel(), listing_date < Sys.Date() - 365*2.5) %>%
+    filter(!(doc_type %in% c("Final", "Draft Revision 1", 
+                             "Draft Revision 2", "Final Revision 1",
+                             "Final Revision 2", "Final Revision 3")))
+  flexdashboard::valueBox(
+    caption = "Number of Species Missing <span style='font-weight:900 !important;'>Final</span> Recovery Plans",
+    value = nrow(not_final),
+    color = "danger",
+    icon = "fa-times-circle"
+  )
+})
+```
+
