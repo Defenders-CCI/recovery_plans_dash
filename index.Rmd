@@ -87,7 +87,7 @@ usr_sel <- function(df, tx, re, st = "All") {
   if(st != "All") {
     df <- filter(df, doc_type == st)
   }
-  if(dim(df)[1] == 0) stop("No data matches.")
+  # if(nrow(df) == 0) stop("No data matches.")
   return(df)
 }
 
@@ -113,31 +113,52 @@ Row {data-height=750}
 renderPlotly({
   cur <- uniq_sel()
   nbins <- dat$listing_year %>% unique() %>% length() 
-  plot_ly(
-    data = dat,
-    type = "histogram",
-    x = dat$listing_year,
-    marker = list(color = "rgba(0,0,0,0.1)"),
-    nbinsx = nbins,
-    xbins = list(start = min(dat$listing_year),
-                 end = max(dat$listing_year)),
-    name = "Listings"
-  ) %>%
-    add_histogram(x = dat$doc_year,
-                  marker = list(color = "rgba(0,0,0,0.2)"),
-                  nbinsx = nbins,
-                  xbins = list(start = min(dat$listing_year),
-                               end = max(dat$listing_year)),
-                  name = "All plans") %>%
-    add_histogram(x = cur$doc_year,
-                  marker = list(color = "#FFCF00"),
-                  nbinsx = nbins,
-                  xbins = list(start = min(dat$listing_year),
-                               end = max(dat$listing_year)),
-                  name = "Filtered plans") %>%
-    layout(barmode = "overlay",
-           xaxis = list(title = "Date of review"),
-           yaxis = list(title = "Number of reviews"))
+  if(nrow(cur) > 0) {
+    plot_ly(
+      data = dat,
+      type = "histogram",
+      x = dat$listing_year,
+      marker = list(color = "rgba(0,0,0,0.1)"),
+      nbinsx = nbins,
+      xbins = list(start = min(dat$listing_year),
+                   end = max(dat$listing_year)),
+      name = "Listings"
+    ) %>%
+      add_histogram(x = dat$doc_year,
+                    marker = list(color = "rgba(0,0,0,0.2)"),
+                    nbinsx = nbins,
+                    xbins = list(start = min(dat$listing_year),
+                                 end = max(dat$listing_year)),
+                    name = "All plans") %>%
+      add_histogram(x = cur$doc_year,
+                    marker = list(color = "#FFCF00"),
+                    nbinsx = nbins,
+                    xbins = list(start = min(dat$listing_year),
+                                 end = max(dat$listing_year)),
+                    name = "Filtered plans") %>%
+      layout(barmode = "overlay",
+             xaxis = list(title = "Date of review"),
+             yaxis = list(title = "Number of reviews"))
+  } else {
+    blank <- tibble(x = c(0), y = c(0), text = "No data match selection")
+    ax <- list(
+      title = "",
+      zeroline = FALSE,
+      showline = FALSE,
+      showticklabels = FALSE,
+      showgrid = FALSE
+    )
+    plot_ly(
+      data = blank,
+      type = "scatter",
+      mode = "text",
+      x = ~x,
+      y = ~y,
+      text = ~text,
+      textfont = list(color = '#000000', size = 22)
+    ) %>%
+      layout(xaxis = ax, yaxis = ax)
+  }
 })
 ```
 
@@ -147,11 +168,19 @@ Row {data-height=150}
 
 ```{r info1, echo=FALSE}
 flexdashboard::renderValueBox({
-  flexdashboard::valueBox(
-    caption = "Number of ESA-listed Species <span style='font-weight:900 !important;'>with FWS Lead</span>",
-    value = nrow(list_sel()),
-    color = "info"
-  )
+  if(nrow(list_sel()) > 0) {
+    flexdashboard::valueBox(
+      caption = "Number of ESA-listed Species <span style='font-weight:900 !important;'>with FWS Lead</span>",
+      value = nrow(list_sel()),
+      color = "info"
+    )
+  } else {
+    flexdashboard::valueBox(
+      caption = "Number of ESA-listed Species <span style='font-weight:900 !important;'>with FWS Lead</span>",
+      value = 0,
+      color = "info"
+    )
+  }
 })
 ```
 
