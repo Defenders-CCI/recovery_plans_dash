@@ -140,7 +140,7 @@ renderPlotly({
              xaxis = list(title = "Date of review"),
              yaxis = list(title = "Number of reviews"))
   } else {
-    blank <- tibble(x = c(0), y = c(0), text = "No data match selection")
+    blank <- tibble(x = c(0), y = c(0), text = "No data match filters")
     ax <- list(
       title = "",
       zeroline = FALSE,
